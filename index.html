@@ -1,0 +1,238 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="game-title">Ultimate Tic-Tac-Toe</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="text-white default">
+    <div class="background-animation"></div>
+    <div class="background-particles" id="particles"></div>
+    <div id="profile" class="profile-icon cursor-pointer">
+        <img id="avatar" src="https://via.placeholder.com/50" class="w-12 h-12 rounded-full avatar glow" alt="Profile">
+    </div>
+    <header class="flex justify-center items-center p-4">
+        <h1 id="game-header" class="text-3xl font-bold glow game-title">Ultimate Tic-Tac-Toe</h1>
+        <div class="absolute right-4 flex space-x-4">
+            <div id="sound-toggle" class="cursor-pointer pulse">
+                <span class="text-2xl" id="sound-icon">🔊</span>
+            </div>
+            <div id="support" class="cursor-pointer pulse">
+                <span class="text-2xl">❓</span>
+            </div>
+            <div id="theme" class="cursor-pointer pulse">
+                <span class="text-2xl">🖌️</span>
+            </div>
+        </div>
+    </header>
+
+    <main id="main-menu" class="flex flex-col items-center justify-center h-screen">
+        <div class="grid grid-cols-1 gap-4">
+            <button id="pvp" class="bg-blue-600 text-white px-6 py-3 rounded-lg glow pulse text-xl">⚡ Player vs Player</button>
+            <button id="pvc" class="bg-green-600 text-white px-6 py-3 rounded-lg glow pulse text-xl">🤖 Player vs Computer</button>
+        </div>
+    </main>
+
+    <div id="difficulty" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center">
+        <div class="bg-gray-900 p-6 rounded-lg glow">
+            <h2 class="text-2xl mb-4">Select AI Difficulty</h2>
+            <button id="easy" class="bg-green-500 text-white px-4 py-2 rounded-lg m-2 glow">😊 Easy</button>
+            <button id="medium" class="bg-yellow-500 text-white px-4 py-2 rounded-lg m-2 glow">🤔 Medium</button>
+            <button id="hard" class="bg-red-500 text-white px-4 py-2 rounded-lg m-2 glow">😈 Hard</button>
+            <button id="back" class="bg-gray-600 text-white px-4 py-2 rounded-lg m-2 glow">⬅ Back</button>
+        </div>
+    </div>
+
+    <div id="game" class="hidden flex flex-col items-center justify-center h-screen">
+        <div id="turn-indicator" class="turn-indicator"></div>
+        <div id="game-board" class="grid grid-cols-3 gap-2 w-80 h-80"></div>
+        <div id="game-status" class="text-2xl mt-4 font-bold"></div>
+        <div class="flex space-x-4 mt-4">
+            <button id="reset" class="bg-red-600 text-white px-4 py-2 rounded-lg glow">💥 Reset</button>
+            <button id="main-menu-btn" class="bg-blue-600 text-white px-4 py-2 rounded-lg glow">🌀 Main Menu</button>
+        </div>
+    </div>
+
+    <div id="profile-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center profile-modal">
+        <div class="bg-gray-900 p-6 rounded-lg glow w-96 border-4 border-blue-500">
+            <h2 class="text-2xl mb-4 text-center font-bold">Profile Settings</h2>
+            <div id="profile-pic-upload" class="border-2 border-dashed p-4 mb-4 text-center bg-gray-800 rounded-lg">
+                <span class="text-3xl block mb-2">📷</span>
+                Drag & Drop Profile Picture<br>or<br>
+                <input type="file" id="profile-pic-input" accept="image/*" class="mt-2 text-sm">
+                <div id="no-file" class="text-gray-400 mt-2">No file chosen</div>
+            </div>
+            <div id="stats" class="text-lg">
+                <p>PVP Stats: <span id="pvp-stats">0W/0L/0D</span></p>
+                <div class="w-full bg-gray-700 rounded h-4 mb-2">
+                    <div id="pvp-progress" class="bg-blue-500 h-4 rounded stat-bar" style="width: 0%"></div>
+                </div>
+                <p>PVC Easy Stats: <span id="pvc-easy-stats">0W/0L/0D</span></p>
+                <div class="w-full bg-gray-700 rounded h-4 mb-2">
+                    <div id="pvc-easy-progress" class="bg-green-500 h-4 rounded stat-bar" style="width: 0%"></div>
+                </div>
+                <p>PVC Medium Stats: <span id="pvc-medium-stats">0W/0L/0D</span></p>
+                <div class="w-full bg-gray-700 rounded h-4 mb-2">
+                    <div id="pvc-medium-progress" class="bg-yellow-500 h-4 rounded stat-bar" style="width: 0%"></div>
+                </div>
+                <p>PVC Hard Stats: <span id="pvc-hard-stats">0W/0L/0D</span></p>
+                <div class="w-full bg-gray-700 rounded h-4 mb-2">
+                    <div id="pvc-hard-progress" class="bg-red-500 h-4 rounded stat-bar" style="width: 0%"></div>
+                </div>
+            </div>
+            <button id="close-profile" class="bg-blue-600 text-white px-4 py-2 rounded-lg mt-4 glow w-full">Close</button>
+        </div>
+    </div>
+
+    <div id="support-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center">
+        <div class="bg-gray-900 p-6 rounded-lg glow w-96">
+            <h2 class="text-2xl mb-4">Support Center</h2>
+            <textarea id="support-input" class="w-full h-32 p-2 bg-gray-800 text-white rounded-lg" placeholder="Describe your issue or ask a question"></textarea>
+            <button id="submit-support" class="bg-blue-600 text-white px-4 py-2 rounded-lg mt-4 glow">Submit</button>
+            <div id="support-response" class="mt-4"></div>
+            <button id="close-support" class="bg-blue-600 text-white px-4 py-2 rounded-lg mt-4 glow">Close</button>
+        </div>
+    </div>
+
+    <div id="admin-panel" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center">
+        <div class="admin-panel p-6 rounded-lg glow w-96">
+            <h2 class="text-2xl mb-4 text-center font-bold">Admin Control Panel</h2>
+            <div class="admin-section">
+                <h3 class="text-xl">Game Name & Logo</h3>
+                <input id="game-name" class="w-full p-2 rounded-lg" placeholder="e.g., Ultimate Tic-Tac-Toe GOD">
+                <input id="game-logo" class="w-full p-2 rounded-lg mt-2" placeholder="Logo Emoji or URL">
+                <button id="update-game-name" class="bg-green-600 text-white px-4 py-2 rounded-lg mt-2 glow">Update</button>
+            </div>
+            <div class="admin-section">
+                <h3 class="text-xl">Admin Login Code</h3>
+                <input id="admin-code" class="w-full p-2 rounded-lg" placeholder="e.g., I AM ADMIN 000">
+                <button id="update-admin-code" class="bg-green-600 text-white px-4 py-2 rounded-lg mt-2 glow">Update</button>
+            </div>
+            <div class="admin-section">
+                <h3 class="text-xl">Turn Logic</h3>
+                <select id="turn-logic" class="w-full p-2 rounded-lg">
+                    <option value="alternate">Alternate (X then O)</option>
+                    <option value="random">Random Start</option>
+                    <option value="x-first">X Always First</option>
+                    <option value="o-first">O Always First</option>
+                </select>
+                <button id="update-turn-logic" class="bg-green-600 text-white px-4 py-2 rounded-lg mt-2 glow">Update</button>
+            </div>
+            <div class="admin-section">
+                <h3 class="text-xl">Button Customization</h3>
+                <input id="button-text" class="w-full p-2 rounded-lg" placeholder="Button Text (e.g., Play Now)">
+                <input id="button-icon" class="w-full p-2 rounded-lg mt-2" placeholder="Button Icon (e.g., ⚡)">
+                <input id="button-color" class="w-full p-2 rounded-lg mt-2" placeholder="Button Color (e.g., bg-blue-600)">
+                <button id="update-button" class="bg-green-600 text-white px-4 py-2 rounded-lg mt-2 glow">Update</button>
+            </div>
+            <div class="admin-section">
+                <h3 class="text-xl">Sound Customization</h3>
+                <input id="sound-x" class="w-full p-2 rounded-lg" placeholder="X Sound URL">
+                <input id="sound-o" class="w-full p-2 rounded-lg mt-2" placeholder="O Sound URL">
+                <input id="sound-win" class="w-full p-2 rounded-lg mt-2" placeholder="Win Sound URL">
+                <button id="update-sounds" class="bg-green-600 text-white px-4 py-2 rounded-lg mt-2 glow">Update</button>
+            </div>
+            <div class="admin-section">
+                <h3 class="text-xl">Add Theme</h3>
+                <input id="theme-name" class="w-full p-2 rounded-lg" placeholder="Theme Name">
+                <input id="theme-colors" class="w-full p-2 rounded-lg mt-2" placeholder="CSS Colors (e.g., #1e3a8a)">
+                <input id="theme-icon" class="w-full p-2 rounded-lg mt-2" placeholder="Icon Emoji (e.g., 🌌)">
+                <button id="add-theme" class="bg-green-600 text-white px-4 py-2 rounded-lg mt-2 glow">Add</button>
+            </div>
+            <div class="admin-section">
+                <h3 class="text-xl">Delete Theme</h3>
+                <select id="delete-theme" class="w-full p-2 rounded-lg">
+                    <option value="">Select Theme</option>
+                </select>
+                <button id="delete-theme-btn" class="bg-red-600 text-white px-4 py-2 rounded-lg mt-2 glow">Delete</button>
+            </div>
+            <div class="admin-section">
+                <h3 class="text-xl">Add Emoji Style</h3>
+                <input id="emoji-x" class="w-full p-2 rounded-lg" placeholder="X Emoji">
+                <input id="emoji-o" class="w-full p-2 rounded-lg mt-2" placeholder="O Emoji">
+                <button id="add-emoji" class="bg-green-600 text-white px-4 py-2 rounded-lg mt-2 glow">Add</button>
+            </div>
+            <div class="admin-section">
+                <h3 class="text-xl">Delete Emoji Style</h3>
+                <select id="delete-emoji" class="w-full p-2 rounded-lg">
+                    <option value="">Select Emoji Style</option>
+                </select>
+                <button id="delete-emoji-btn" class="bg-red-600 text-white px-4 py-2 rounded-lg mt-2 glow">Delete</button>
+            </div>
+            <div class="admin-section">
+                <h3 class="text-xl">Grid Animations</h3>
+                <select id="grid-animation" class="w-full p-2 rounded-lg">
+                    <option value="wave">Wave</option>
+                    <option value="zoom">Zoom In/Out</option>
+                    <option value="rotate">Rotate</option>
+                    <option value="color-shift">Color Shift</option>
+                    <option value="flip">Flip</option>
+                    <option value="blink">Blinking Lights</option>
+                    <option value="slide">Slide In/Out</option>
+                    <option value="border-glow">Border Glow</option>
+                    <option value="checkerboard">Checkerboard Flip</option>
+                </select>
+                <button id="update-grid-animation" class="bg-green-600 text-white px-4 py-2 rounded-lg mt-2 glow">Apply</button>
+            </div>
+            <div class="admin-section">
+                <h3 class="text-xl">Support Messages</h3>
+                <div id="support-messages" class="bg-gray-800 p-4 rounded-lg max-h-40 overflow-y-auto"></div>
+            </div>
+            <button id="close-admin" class="bg-blue-600 text-white px-4 py-2 rounded-lg mt-4 glow w-full">Close</button>
+        </div>
+    </div>
+
+    <div id="theme-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center">
+        <div class="bg-gray-900 p-6 rounded-lg glow">
+            <h2 class="text-2xl mb-4">Select Theme</h2>
+            <div id="theme-grid" class="grid grid-cols-3 gap-4"></div>
+            <h2 class="text-2xl mt-6 mb-4">Select Emoji Style</h2>
+            <div id="emoji-grid" class="grid grid-cols-3 gap-4"></div>
+            <button id="close-theme" class="bg-blue-600 text-white px-4 py-2 rounded-lg mt-4 glow">Close</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
